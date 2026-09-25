@@ -1,0 +1,49 @@
+services:
+  # Serveur web : PHP 8.3 + Apache (image construite depuis docker/php/Dockerfile)
+  web:
+    build: ./docker/php
+    ports:
+      - "8080:80"
+    volumes:
+      - ./app:/var/www/html          # le code est monté : pas besoin de rebuild à chaque modification
+    environment:
+      DB_HOST: db                    # nom du service MySQL = nom d'hôte sur le réseau Compose
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy   # attend que MySQL réponde vraiment, pas seulement qu'il soit lancé
+
+  # Base de données MySQL 8.4
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql                              # persistance des données
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro  # scripts exécutés au 1er démarrage uniquement
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # Interface d'administration de la base (optionnelle)
+  phpmyadmin:
+    image: phpmyadmin:5
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
